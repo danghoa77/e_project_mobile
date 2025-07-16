@@ -1,7 +1,4 @@
-// src/screens/ProductListScreen.tsx
-
-import React, { useState, useEffect } from 'react';
-// Thêm SafeAreaView để giao diện không bị đè lên tai thỏ hoặc các thanh hệ thống
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import * as productService from '../services/productService';
 import { Product } from '../types/product';
@@ -21,20 +18,61 @@ export default function ProductListScreen({ navigation }: Props) {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        productService.getAllProducts()
-            .then(response => setProducts(response.data.products))
+    // 1. Thêm các state mới cho phân trang
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const [loadingMore, setLoadingMore] = useState(false);
+
+    // 2. Tách logic fetch data ra một hàm riêng
+    const fetchProducts = useCallback((currentPage: number) => {
+        // Nếu là trang đầu tiên thì hiển thị loading chính, nếu không thì hiển thị loading ở footer
+        currentPage === 1 ? setLoading(true) : setLoadingMore(true);
+
+        productService.getAllProducts({ page: currentPage, limit: 10 })
+            .then(response => {
+                const newProducts = response.data.products;
+                const totalProducts = response.data.total;
+
+                // Nếu là trang 1, thay thế toàn bộ danh sách.
+                // Nếu là các trang sau, nối vào danh sách hiện tại.
+                setProducts(prevProducts =>
+                    currentPage === 1 ? newProducts : [...prevProducts, ...newProducts]
+                );
+                setTotal(totalProducts);
+            })
             .catch(error => console.error("Failed to fetch products:", error))
-            .finally(() => setLoading(false));
+            .finally(() => {
+                setLoading(false);
+                setLoadingMore(false);
+            });
     }, []);
+
+    // Tải trang đầu tiên khi component được mở
+    useEffect(() => {
+        fetchProducts(1);
+    }, [fetchProducts]);
+
+    // 3. Hàm xử lý khi người dùng cuộn đến cuối danh sách
+    const handleLoadMore = () => {
+        // Chỉ tải thêm nếu danh sách hiện tại chưa đủ và không đang trong quá trình tải
+        if (products.length < total && !loadingMore) {
+            const nextPage = page + 1;
+            setPage(nextPage);
+            fetchProducts(nextPage);
+        }
+    };
+
+    // Component hiển thị ở cuối danh sách khi đang tải thêm
+    const renderFooter = () => {
+        if (!loadingMore) return null;
+        return <ActivityIndicator style={{ marginVertical: 20 }} />;
+    };
 
     if (loading) {
         return <ActivityIndicator size="large" style={styles.centered} />;
     }
 
-    // --- SỬA LẠI PHẦN RETURN ---
     return (
-        // Bọc toàn bộ bằng SafeAreaView và View có style flex: 1
         <SafeAreaView style={styles.container}>
             <FlatList
                 data={products}
@@ -42,45 +80,30 @@ export default function ProductListScreen({ navigation }: Props) {
                 renderItem={({ item }) => (
                     <TouchableOpacity style={styles.productItem} onPress={() => navigation.navigate('ProductDetail', { productId: item._id })}>
                         <Text style={styles.productName}>{item.name}</Text>
-
-                        {item.variants && item.variants.length > 0 ? (
+                        {item.variants && item.variants.length > 0 && typeof item.variants[0].price === 'number' ? (
                             <Text>{item.variants[0].price.toLocaleString('vi-VN')} VNĐ</Text>
                         ) : (
                             <Text>Liên hệ</Text>
                         )}
                     </TouchableOpacity>
                 )}
-                // Thêm component để xử lý khi không có dữ liệu
                 ListEmptyComponent={() => (
                     <View style={styles.centered}>
                         <Text>Không có sản phẩm nào.</Text>
                     </View>
                 )}
+                // 4. Thêm các thuộc tính để kích hoạt phân trang
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={renderFooter}
             />
         </SafeAreaView>
     );
 }
 
-// --- SỬA LẠI PHẦN STYLES ---
 const styles = StyleSheet.create({
-    // Style cho container chính
-    container: {
-        flex: 1,
-        backgroundColor: '#fff', // Thêm màu nền để chắc chắn
-    },
-    centered: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginTop: 50, // Thêm khoảng cách để thông báo không bị dính sát lề
-    },
-    productItem: {
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: '#ccc'
-    },
-    productName: {
-        fontSize: 18,
-        fontWeight: 'bold'
-    },
+    container: { flex: 1, backgroundColor: '#fff' },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 50 },
+    productItem: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#ccc' },
+    productName: { fontSize: 18, fontWeight: 'bold' },
 });

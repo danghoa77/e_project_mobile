@@ -10,6 +10,7 @@ interface AuthContextType {
     signIn: (payload: LoginPayload) => Promise<void>;
     registerAndSignIn: (payload: RegisterPayload) => Promise<void>;
     signOut: () => void;
+    signInWithToken: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -34,6 +35,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
+    const handleSignInWithToken = async (token: string) => {
+        try {
+            await AsyncStorage.setItem('userToken', token);
+            setUserToken(token);
+
+            const userResponse = await authService.getMe();
+            setUserInfo(userResponse.data);
+        } catch (e) {
+            console.error("Failed to sign in with token", e);
+            await handleSignOut();
+        }
+    };
+
     const handleSignIn = async (payload: LoginPayload) => {
         try {
             const response = await authService.login(payload);
@@ -41,18 +55,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await AsyncStorage.setItem('userToken', access_token);
             setUserToken(access_token);
 
-            // --- BỎ COMMENT CÁC DÒNG NÀY ---
             const userResponse = await authService.getMe();
             setUserInfo(userResponse.data);
-            // ------------------------------------
-
-        } catch (e: any) { // Thêm :any để bắt lỗi chi tiết
+        } catch (e: any) {
             console.error("Login failed");
-            // Log lỗi chi tiết giống như ở checkLoginStatus để dễ debug
             if (e.response) {
-                console.error("Lỗi từ Server:", e.response.data);
+                console.error("Error from Server:", e.response.data);
             }
-            throw new Error("Đăng nhập thất bại.");
+            throw new Error("Login failed.");
         }
     };
 
@@ -62,45 +72,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserInfo(null);
     };
 
-    // bên trong hàm AuthProvider của file AuthContext.tsx
-
     const checkLoginStatus = async () => {
         try {
-            // ... code trong khối try không đổi ...
             const token = await AsyncStorage.getItem('userToken');
             if (token) {
                 setUserToken(token);
                 const userResponse = await authService.getMe();
                 setUserInfo(userResponse.data);
             }
-        } catch (e: any) { // <-- Thêm : any ở đây để TypeScript không báo lỗi
-
-            // --- BẮT ĐẦU THAY ĐỔI ---
+        } catch (e: any) {
             console.error("--- TOKEN CHECK FAILED ---");
 
             if (e.response) {
-                // Trường hợp server phản hồi lại với một mã lỗi (4xx, 5xx)
-                // Đây là trường hợp của bạn (404)
-                console.error("Lỗi từ Server (Response Error):");
-                console.log("-> Status:", e.response.status); // Ví dụ: 404
-                console.log("-> Data:", e.response.data); // Nội dung lỗi mà backend trả về, quan trọng nhất!
-
+                console.error("(Response Error):");
+                console.log("-> Status:", e.response.status);
+                console.log("-> Data:", e.response.data);
             } else if (e.request) {
-                // Trường hợp request đã được gửi đi nhưng không nhận được phản hồi
-                // (Thường do sai địa chỉ IP, server backend bị sập, hoặc mất mạng)
-                console.error("Không nhận được phản hồi (Request Error)");
-
+                console.error("(Request Error)");
             } else {
-                // Lỗi khác xảy ra khi thiết lập request
-                console.error("Lỗi không xác định (General Error):", e.message);
+                console.error("(General Error):", e.message);
             }
 
             console.log("--- Request Config ---");
-            console.log("URL:", e.config.url); // Kiểm tra xem URL có đúng là /users/me không
-            console.log("Method:", e.config.method); // Kiểm tra phương thức
-            // --- KẾT THÚC THAY ĐỔI ---
+            console.log("URL:", e.config.url);
+            console.log("Method:", e.config.method);
 
-            await handleSignOut(); // Vẫn đăng xuất người dùng nếu token lỗi
+            await handleSignOut();
         } finally {
             setIsLoading(false);
         }
@@ -111,7 +108,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ signIn: handleSignIn, registerAndSignIn: handleRegisterAndSignIn, signOut: handleSignOut, userToken, userInfo, isLoading }}>
+        <AuthContext.Provider value={{
+            signIn: handleSignIn,
+            signInWithToken: handleSignInWithToken,
+            registerAndSignIn: handleRegisterAndSignIn,
+            signOut: handleSignOut,
+            userToken,
+            userInfo,
+            isLoading
+        }}>
             {children}
         </AuthContext.Provider>
     );
