@@ -17,15 +17,11 @@ type Props = CompositeScreenProps<
 export default function ProductListScreen({ navigation }: Props) {
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
-
-    // 1. Thêm các state mới cho phân trang
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
     const [loadingMore, setLoadingMore] = useState(false);
 
-    // 2. Tách logic fetch data ra một hàm riêng
     const fetchProducts = useCallback((currentPage: number) => {
-        // Nếu là trang đầu tiên thì hiển thị loading chính, nếu không thì hiển thị loading ở footer
         currentPage === 1 ? setLoading(true) : setLoadingMore(true);
 
         productService.getAllProducts({ page: currentPage, limit: 10 })
@@ -33,8 +29,6 @@ export default function ProductListScreen({ navigation }: Props) {
                 const newProducts = response.data.products;
                 const totalProducts = response.data.total;
 
-                // Nếu là trang 1, thay thế toàn bộ danh sách.
-                // Nếu là các trang sau, nối vào danh sách hiện tại.
                 setProducts(prevProducts =>
                     currentPage === 1 ? newProducts : [...prevProducts, ...newProducts]
                 );
@@ -47,14 +41,11 @@ export default function ProductListScreen({ navigation }: Props) {
             });
     }, []);
 
-    // Tải trang đầu tiên khi component được mở
     useEffect(() => {
         fetchProducts(1);
     }, [fetchProducts]);
 
-    // 3. Hàm xử lý khi người dùng cuộn đến cuối danh sách
     const handleLoadMore = () => {
-        // Chỉ tải thêm nếu danh sách hiện tại chưa đủ và không đang trong quá trình tải
         if (products.length < total && !loadingMore) {
             const nextPage = page + 1;
             setPage(nextPage);
@@ -62,7 +53,6 @@ export default function ProductListScreen({ navigation }: Props) {
         }
     };
 
-    // Component hiển thị ở cuối danh sách khi đang tải thêm
     const renderFooter = () => {
         if (!loadingMore) return null;
         return <ActivityIndicator style={{ marginVertical: 20 }} />;
@@ -92,7 +82,6 @@ export default function ProductListScreen({ navigation }: Props) {
                         <Text>Không có sản phẩm nào.</Text>
                     </View>
                 )}
-                // 4. Thêm các thuộc tính để kích hoạt phân trang
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.5}
                 ListFooterComponent={renderFooter}
