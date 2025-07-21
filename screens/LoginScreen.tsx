@@ -8,7 +8,7 @@ import { useAuthRequest, makeRedirectUri, ResponseType } from 'expo-auth-session
 
 // 1. Import API_BASE_URL và GOOGLE_CLIENT_ID
 import { API_BASE_URL, GOOGLE_CLIENT_ID } from '@env';
-
+console.log('API_BASE_URL =', API_BASE_URL);
 WebBrowser.maybeCompleteAuthSession();
 
 const discovery = {
@@ -34,16 +34,29 @@ export default function LoginScreen({ navigation }: any) {
     );
 
     useEffect(() => {
-        if (response?.type === 'success') {
-            const { url } = response;
-            const params = new URL(url).searchParams;
-            const token = params.get('token');
+        const handleGoogleLogin = async () => {
+            if (response?.type === 'success') {
+                const { url } = response;
+                const params = new URL(url).searchParams;
+                const token = params.get('token');
 
-            if (token) {
-                signInWithToken(token);
+                if (token) {
+                    try {
+                        await signInWithToken(token);
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'MainTabs' }],
+                        });
+                    } catch (err) {
+                        Alert.alert('Đăng nhập thất bại', 'Không thể đăng nhập với Google');
+                    }
+                }
             }
-        }
+        };
+
+        handleGoogleLogin();
     }, [response]);
+
 
     const handleLogin = async () => {
         if (!email || !password) {

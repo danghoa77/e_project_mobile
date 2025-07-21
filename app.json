@@ -2,6 +2,9 @@
   "expo": {
     "name": "e_project_mobile",
     "scheme": "e_project_mobile",
+    "deepLinks": [
+      "e_project_mobile://"
+    ],
     "slug": "e_project_mobile",
     "version": "1.0.0",
     "orientation": "portrait",
