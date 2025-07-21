@@ -1,3 +1,4 @@
+// src/navigations/MainStackNavigator.tsx
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigatorScreenParams } from '@react-navigation/native';

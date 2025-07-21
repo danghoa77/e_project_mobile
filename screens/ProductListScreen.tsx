@@ -1,3 +1,4 @@
+// src/screens/ProductListScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import * as productService from '../services/productService';
