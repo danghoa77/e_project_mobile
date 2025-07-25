@@ -1,93 +1,94 @@
-// src/screens/LoginScreen.tsx
-
 import React, { useEffect, useState } from 'react';
-import { View, Button, StyleSheet, Text, Platform, TextInput, Alert } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import { View, Button, StyleSheet, Text, TextInput, Alert } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
-import { useAuthRequest, makeRedirectUri, ResponseType } from 'expo-auth-session';
-
-// 1. Import API_BASE_URL và GOOGLE_CLIENT_ID
+import * as Google from 'expo-auth-session/providers/google';
+import axios from 'axios';
 import { API_BASE_URL, GOOGLE_CLIENT_ID } from '@env';
-console.log('API_BASE_URL =', API_BASE_URL);
-WebBrowser.maybeCompleteAuthSession();
+import { useAuth } from '../context/AuthContext';
+import * as AuthSession from 'expo-auth-session';
 
-const discovery = {
-    authorizationEndpoint: `${API_BASE_URL}/auth/google`,
-};
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen({ navigation }: any) {
     const { signIn, signInWithToken } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-
-    const [request, response, promptAsync] = useAuthRequest(
-        {
-            // 2. Thêm clientId vào đây
-            clientId: GOOGLE_CLIENT_ID,
-            responseType: ResponseType.Code,
-            redirectUri: makeRedirectUri({
-                scheme: 'e_project_mobile',
-                path: 'auth/success',
-            }),
-        },
-        discovery
-    );
-
+    const [request, response, promptAsync] = Google.useAuthRequest({
+        // Sử dụng expoClientId và đảm bảo GOOGLE_CLIENT_ID là của Web application
+        clientId: GOOGLE_CLIENT_ID,
+    });
     useEffect(() => {
-        const handleGoogleLogin = async () => {
+        const handleGoogleResponse = async () => {
             if (response?.type === 'success') {
-                const { url } = response;
-                const params = new URL(url).searchParams;
-                const token = params.get('token');
-
-                if (token) {
+                const { authentication } = response;
+                if (authentication?.accessToken) {
                     try {
-                        await signInWithToken(token);
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'MainTabs' }],
+                        // Dùng accessToken của Google để lấy thông tin người dùng
+                        const { data: googleUser } = await axios.get(
+                            `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${authentication.accessToken}`
+                        );
+
+                        const { id: googleId, email, given_name: firstName, family_name: lastName, picture } = googleUser;
+
+                        // Gửi thông tin về backend để lấy token của hệ thống
+                        const res = await axios.post(`${API_BASE_URL}/auth/google`, {
+                            googleId, email, firstName, lastName, picture,
                         });
-                    } catch (err) {
+
+                        const { access_token } = res.data;
+                        if (access_token) {
+                            await signInWithToken(access_token);
+                        } else {
+                            throw new Error('Không nhận được token từ server');
+                        }
+                    } catch (error) {
+                        console.error('Google login error:', error);
                         Alert.alert('Đăng nhập thất bại', 'Không thể đăng nhập với Google');
                     }
                 }
             }
         };
 
-        handleGoogleLogin();
+        handleGoogleResponse();
     }, [response]);
-
-
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert("Lỗi", "Vui lòng nhập email và mật khẩu.");
+            Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
             return;
         }
         try {
             await signIn({ email, password });
         } catch (error: any) {
-            Alert.alert("Đăng nhập thất bại", error.message);
+            Alert.alert('Đăng nhập thất bại', error.message);
         }
     };
-
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Đăng Nhập</Text>
-
-            <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
-            <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+            <TextInput
+                style={styles.input}
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+            />
+            <TextInput
+                style={styles.input}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+            />
             <Button title="Đăng nhập" onPress={handleLogin} />
             <Button title="Chưa có tài khoản? Đăng ký" onPress={() => navigation.navigate('Register')} />
-
             <View style={{ marginVertical: 10 }} />
-
             <Button
                 disabled={!request}
                 title="Đăng nhập với Google"
-                onPress={() => {
-                    promptAsync();
-                }}
+                onPress={() => promptAsync()}
             />
         </View>
     );
