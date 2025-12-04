@@ -1,5 +1,6 @@
+// tsconfig.json
 {
- "extends": "expo/tsconfig.base",
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
     "paths": {
@@ -12,6 +13,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
-, "tamagui.config.js"  ]
+    "expo-env.d.ts",
+    "tamagui.config.ts",
+    "nativewind-env.d.ts"
+  ]
 }
