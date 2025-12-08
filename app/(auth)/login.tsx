@@ -1,150 +1,111 @@
+// app/(auth)/login.tsx
+
+import { authApi } from "@/api/auth";
+import { useAuthStore } from "@/stores/authStore";
+import { AxiosError } from "axios";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
+  ActivityIndicator,
+  Pressable,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
+import { toast } from "sonner-native";
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const { setUser, token } = useAuthStore();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoginTab, setIsLoginTab] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  // --- LOGIC HANDLERS ---
-  const handleLogin = () => {
-    // TODO: Thực hiện logic đăng nhập (Call API, validate, v.v.)
-    console.log("Login pressed:", { email, password });
+  const handleLogin = async () => {
+    if (!email || !password) {
+      toast.error("Please enter email & password");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await authApi.login(email, password);
+      console.log("res", res);
+      setUser(res.user, res.access_token);
+      router.replace("/");
+      toast.success("Logged in successfully!");
+    } catch (err) {
+      const error = err as AxiosError<any>;
+      const message =
+        error.response?.data?.message || "Email or password is incorrect.";
+
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const handleGoogleLogin = () => {
-    // TODO: Thực hiện logic đăng nhập bằng Google
-    console.log("Google login pressed");
-  };
-
-  const handleTabSwitch = (isLogin: boolean) => {
-    setIsLoginTab(isLogin);
-    // TODO: Reset form hoặc điều hướng
-  };
-
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className="flex-1"
+    <View className="flex-1 justify-center px-6 bg-white">
+      <Text className="text-3xl font-bold mb-8 text-center">Login</Text>
+
+      <Text className="font-medium mb-1">Email</Text>
+      <TextInput
+        className="border-b border-gray-300 pb-2 mb-6"
+        placeholder="email@example.com"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <Text className="font-medium mb-1">Password</Text>
+      <TextInput
+        className="border-b border-gray-300 pb-2 mb-2"
+        placeholder="••••••••"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+
+      <Pressable
+        onPress={handleLogin}
+        disabled={loading}
+        className="w-full py-3 bg-black rounded-md items-center mt-4"
       >
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View className="px-6 pt-6 pb-10">
-            <View className="flex-row border border-black rounded overflow-hidden mb-10">
-              <TouchableOpacity
-                className={`flex-1 py-3 items-center justify-center ${
-                  isLoginTab ? "bg-white" : "bg-gray-50"
-                } border-r border-black`}
-                onPress={() => handleTabSwitch(true)}
-              >
-                <Text
-                  className={`text-base ${
-                    isLoginTab ? "font-bold" : "font-medium text-gray-500"
-                  }`}
-                >
-                  Login
-                </Text>
-              </TouchableOpacity>
+        {loading ? (
+          <ActivityIndicator color="white" />
+        ) : (
+          <Text className="text-white font-semibold">Login</Text>
+        )}
+      </Pressable>
 
-              <TouchableOpacity
-                className={`flex-1 py-3 items-center justify-center ${
-                  !isLoginTab ? "bg-white" : "bg-gray-50"
-                }`}
-                onPress={() => handleTabSwitch(false)}
-              >
-                <Text
-                  className={`text-base ${
-                    !isLoginTab ? "font-bold" : "font-medium text-gray-500"
-                  }`}
-                >
-                  Register
-                </Text>
-              </TouchableOpacity>
-            </View>
+      <View className="flex-row items-center my-6">
+        <View className="flex-1 h-px bg-neutral-300" />
+        <Text className="mx-3 text-neutral-500 uppercase text-xs">
+          Or continue with
+        </Text>
+        <View className="flex-1 h-px bg-neutral-300" />
+      </View>
 
-            {/* --- HEADER --- */}
-            <View className="mb-8">
-              <Text className="text-3xl font-bold text-black mb-2">
-                Welcome Back
-              </Text>
-              <Text className="text-base text-gray-600 leading-6">
-                Enter your credentials to access your account.
-              </Text>
-            </View>
-            <View className="mb-6">
-              <View className="mb-6">
-                <Text className="text-base font-semibold text-black mb-2">
-                  Email
-                </Text>
-                <TextInput
-                  className="border-b border-black py-2 text-base text-black"
-                  placeholder="your@email.com"
-                  placeholderTextColor="#9CA3AF" 
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </View>
+      <Pressable
+        onPress={() => router.replace("/")}
+        className="w-full py-3 border border-neutral-300 rounded-md flex-row items-center justify-center"
+      >
+        <Text className="text-neutral-700 font-medium">
+          Continue with Google
+        </Text>
+      </Pressable>
 
-              <View className="mb-6">
-                <Text className="text-base font-semibold text-black mb-2">
-                  Password
-                </Text>
-                <TextInput
-                  className="border-b border-black py-2 text-base text-black"
-                  placeholder="........"
-                  placeholderTextColor="#9CA3AF"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              className="bg-neutral-900 py-4 rounded items-center mb-8 active:bg-neutral-700"
-              onPress={handleLogin}
-            >
-              <Text className="text-white text-base font-bold">Login</Text>
-            </TouchableOpacity>
-
-            <View className="flex-row items-center mb-8">
-              <View className="flex-1 h-[1px] bg-gray-200" />
-              <Text className="mx-3 text-xs font-semibold text-gray-400 uppercase">
-                Or continue with
-              </Text>
-              <View className="flex-1 h-[1px] bg-gray-200" />
-            </View>
-
-            <TouchableOpacity
-              className="flex-row items-center justify-center border border-black py-3.5 rounded bg-white"
-              onPress={handleGoogleLogin}
-            >
-              <Image
-                source={{
-                  uri: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png",
-                }}
-                className="w-5 h-5 mr-3"
-                resizeMode="contain"
-              />
-              <Text className="text-black text-base font-semibold">
-                Continue with Google
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <View className="flex-row justify-center items-center mt-6">
+        <Text className="text-neutral-500 mr-2">Don't have an account?</Text>
+        <Pressable
+          onPress={() => router.push("/register")}
+          className="py-1 px-2"
+        >
+          <Text className="text-black font-semibold">Create one</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }

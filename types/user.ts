@@ -1,0 +1,31 @@
+export type UserRole = 'admin' | 'customer';
+
+export interface UserType {
+    _id: string;
+    name: string;
+    email: string;
+    role: UserRole;
+    addresses?: ShippingAddress[];
+    phone?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ShippingAddress {
+    _id: string;
+    street: string;
+    city: string;
+    isDefault?: boolean;
+}
+
+export interface LoginResponse {
+    user: UserType;
+    access_token: string;
+}
+
+export interface Message {
+    id: string;
+    text: string;
+    senderId: string;
+    createdAt: number;
+}
