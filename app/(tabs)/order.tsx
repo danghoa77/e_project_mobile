@@ -1,15 +1,30 @@
+import { cartApi } from "@/api/cart";
 import { orderApi } from "@/api/order";
-import { withAuth } from "@/components/auth/withAuth";
-import { Ionicons } from "@expo/vector-icons";
-import clsx from "clsx";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import paymentApi from "@/api/payment";
+import userApi from "@/api/user";
+import { CartItem } from "@/types/cart";
+import { ShippingAddress } from "@/types/user";
+import { router, useFocusEffect } from "expo-router";
+import {
+  AlertCircle,
+  Banknote,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  MapPin,
+  Smartphone,
+  X,
+} from "lucide-react-native";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
+  Alert,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -18,104 +33,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { toast } from "sonner-native";
 
-const { width } = Dimensions.get("window");
+type PaymentMethod = "cash" | "vnpay" | "momo";
 
-interface CartItem {
-  productId: string;
-  variantId: string;
-  sizeId: string;
-  categoryId: string;
-  quantity: number;
-  name: string;
-  price: number;
-  size: string;
-  color: string;
-  imageUrl: string;
-}
-
-interface ShippingAddress {
-  _id: string;
-  street: string;
-  city: string;
-  isDefault?: boolean;
-}
-
-const AddressSelectionModal = ({
-  visible,
-  onClose,
-  addresses,
-  selectedId,
-  onSelect,
-}: any) => {
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="formSheet"
-    >
-      <View className="flex-1 bg-[#FCF7F1] p-6">
-        <View className="flex-row justify-between items-center mb-6">
-          <Text className="text-lg font-sans font-bold uppercase tracking-widest">
-            Select Address
-          </Text>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="#000" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {addresses.map((addr: ShippingAddress) => {
-            const isSelected = selectedId === addr._id;
-            return (
-              <TouchableOpacity
-                key={addr._id}
-                onPress={() => {
-                  onSelect(addr);
-                  onClose();
-                }}
-                className={clsx(
-                  "p-4 mb-3 border rounded-sm bg-white",
-                  isSelected ? "border-[#FA5800]" : "border-neutral-200"
-                )}
-              >
-                <View className="flex-row justify-between items-center">
-                  <View className="flex-1">
-                    <Text className="font-bold text-neutral-900 mb-1">
-                      {addr.street}
-                    </Text>
-                    <Text className="text-neutral-500 text-sm">
-                      {addr.city}
-                    </Text>
-                    {addr.isDefault && (
-                      <Text className="text-[10px] text-[#FA5800] mt-1 font-bold uppercase">
-                        Default
-                      </Text>
-                    )}
-                  </View>
-                  {isSelected && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color="#FA5800"
-                    />
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-          {addresses.length === 0 && (
-            <Text className="text-center text-neutral-500 mt-10">
-              No addresses found.
-            </Text>
-          )}
-        </ScrollView>
-      </View>
-    </Modal>
-  );
-};
-
-function OrderPage() {
-  const router = useRouter();
+export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -123,69 +43,73 @@ function OrderPage() {
   const [shippingAddress, setShippingAddress] = useState<
     ShippingAddress | undefined
   >(undefined);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "momo" | "vnpay">(
-    "cash"
+
+  const [isAddressModalVisible, setAddressModalVisible] = useState(false);
+  const [tempSelectedIndex, setTempSelectedIndex] = useState<number | null>(
+    null
   );
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
-
-  useEffect(() => {
-    const loadInitialData = async () => {
-      setIsLoading(true);
-      try {
-        const [cartRes, addressRes] = await Promise.all([
-          orderApi.getCart(),
-          orderApi.getAddresses(),
-        ]);
-
-        let items: CartItem[] = [];
-        if (Array.isArray(cartRes)) {
-          items = cartRes;
-        } else if (cartRes?.items && Array.isArray(cartRes.items)) {
-          items = cartRes.items;
-        }
-
-        if (items.length > 0) {
-          setCartItems(items);
-        } else {
-          toast.error("Your cart is empty.");
-          router.replace("/");
-          return;
-        }
-
-        setAllAddresses(addressRes);
-        const defaultAddress =
-          addressRes.find((addr: ShippingAddress) => addr.isDefault) ||
-          addressRes[0];
-        setShippingAddress(defaultAddress);
-      } catch (error) {
-        console.error("Failed to load initial data:", error);
-        toast.error("Could not load page data.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadInitialData();
-  }, []);
-
-  const subtotal = useMemo(
-    () => cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0),
-    [cartItems]
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [isOrderExpanded, setIsOrderExpanded] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      fetchCheckoutData();
+    }, [])
   );
 
-  const handleMomo = async (orderId: string, amount: number) => {
+  const fetchCheckoutData = async () => {
     try {
-      const res = await orderApi.createMomoUrl(orderId, amount);
+      const [cartRes, addressRes] = await Promise.all([
+        cartApi.getCart(),
+        userApi.getAddresses(),
+      ]);
+
+      setCartItems(cartRes || []);
+      setAllAddresses(addressRes || []);
+
+      if (addressRes?.length) {
+        const defaultAddress =
+          addressRes.find((a: ShippingAddress) => a.isDefault) || addressRes[0];
+        setShippingAddress(defaultAddress);
+      }
+    } catch (err) {
+      console.error("Error fetching checkout data:", err);
+      Alert.alert("Error", "Could not load checkout data.");
+    }
+  };
+
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  const openAddressModal = () => {
+    if (shippingAddress && allAddresses.length > 0) {
+      const idx = allAddresses.findIndex(
+        (addr) => addr._id === shippingAddress._id
+      );
+      setTempSelectedIndex(idx !== -1 ? idx : null);
+    } else {
+      setTempSelectedIndex(null);
+    }
+
+    setAddressModalVisible(true);
+    setError(null);
+  };
+
+  const confirmAddressSelection = () => {
+    if (tempSelectedIndex !== null && allAddresses[tempSelectedIndex]) {
+      setShippingAddress(allAddresses[tempSelectedIndex]);
+      setAddressModalVisible(false);
+    }
+  };
+  const handelMomo = async (orderId: string, amount: number) => {
+    try {
+      const res = await paymentApi.createMomoUrl(orderId, amount);
       if (res) {
-        const supported = await Linking.canOpenURL(res);
-        if (supported) {
-          await Linking.openURL(res);
-        } else {
-          toast.error("Cannot open payment app.");
-        }
+        Linking.openURL(res);
       } else {
         toast.error("Could not get MOMO link.");
       }
@@ -195,16 +119,11 @@ function OrderPage() {
     }
   };
 
-  const handleVnpay = async (orderId: string, amount: number) => {
+  const handelVnpay = async (orderId: string, amount: number) => {
     try {
-      const res = await orderApi.createVnpayUrl(orderId, amount);
+      const res = await paymentApi.createVnpayUrl(orderId, amount);
       if (res) {
-        const supported = await Linking.canOpenURL(res);
-        if (supported) {
-          await Linking.openURL(res);
-        } else {
-          toast.error("Cannot open payment app.");
-        }
+        Linking.openURL(res);
       } else {
         toast.error("Could not get VNPay link.");
       }
@@ -213,276 +132,413 @@ function OrderPage() {
       console.error(err);
     }
   };
-
   const handlePlaceOrder = async () => {
     if (!shippingAddress) {
-      toast.error("Please add a shipping address to proceed.");
-      setIsAddressModalOpen(true);
+      setError("Please select a shipping address.");
       return;
     }
 
-    setIsSubmitting(true);
-
-    const orderPayload = {
-      items: cartItems.map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId,
-        sizeId: item.sizeId,
-        categoryId: item.categoryId,
-        quantity: item.quantity,
-        name: item.name,
-        price: item.price,
-        size: item.size,
-        color: item.color,
-      })),
-      shippingAddress: {
-        street: shippingAddress.street,
-        city: shippingAddress.city,
-      },
-      totalPrice: subtotal,
-    };
-
-    const stockPayload = orderPayload.items.map((item) => ({
-      productId: item.productId,
-      variantId: item.variantId,
-      sizeId: item.sizeId,
-      quantity: item.quantity,
-    }));
+    setError(null);
+    setLoading(true);
 
     try {
+      const orderPayload = {
+        items: cartItems.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          sizeId: item.sizeId,
+          categoryId: item.categoryId,
+          quantity: item.quantity,
+          name: item.name,
+          price: item.price,
+          size: item.size,
+          color: item.color,
+        })),
+        shippingAddress: {
+          street: shippingAddress.street,
+          city: shippingAddress.city,
+        },
+        totalPrice: subtotal,
+      };
+
       if (paymentMethod === "cash") {
-        await orderApi.createOrder(orderPayload);
-        await orderApi.decreaseStock(stockPayload);
-        await orderApi.deleteCart();
+        try {
+          console.log("Creating order with payload:", orderPayload);
+          await orderApi.createOrder(orderPayload);
+          const stockPayload = orderPayload.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            sizeId: item.sizeId,
+          }));
+          console.log("Decreasing stock with payload:", stockPayload);
+          await cartApi.decreaseStock(stockPayload);
+          await cartApi.deleteCart();
+          router.replace("/(tabs)");
+          toast.success("Order placed successfully!");
+        } catch (err: any) {
+          const message = err?.response?.data?.message || "Failed to order.";
+          toast.error(message);
 
-        toast.success("Order placed successfully!");
-        router.replace("/");
-      } else if (paymentMethod === "momo" || paymentMethod === "vnpay") {
-        await orderApi.decreaseStock(stockPayload);
-        const order = await orderApi.createOrder(orderPayload);
-
-        if (order && order._id && order.totalPrice != null) {
-          if (paymentMethod === "momo") {
-            await handleMomo(order._id, order.totalPrice);
-          } else {
-            await handleVnpay(order._id, order.totalPrice);
-          }
-        } else {
-          throw new Error("Order data is incomplete.");
+          console.error(" API Error caught:", {
+            message: err?.message,
+            response: err?.response?.data,
+            stack: err?.stack,
+          });
         }
       }
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Failed to order.";
-      console.error("Order Error:", err);
-      toast.error(message);
+
+      if (paymentMethod === "momo") {
+        try {
+          const stockPayload = orderPayload.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId,
+            sizeId: item.sizeId,
+            quantity: item.quantity,
+          }));
+          await cartApi.decreaseStock(stockPayload);
+          const order = await orderApi.createOrder(orderPayload);
+          if (order && order._id && order.totalPrice != null) {
+            await handelMomo(order._id, order.totalPrice);
+          } else {
+            throw new Error("Order data is incomplete.");
+          }
+        } catch (err: any) {
+          const message = err?.response?.data?.message || "Failed to order.";
+          toast.error(message);
+          console.error("Order error:", err);
+        }
+      }
+      if (paymentMethod === "vnpay") {
+        try {
+          const stockPayload = orderPayload.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId,
+            sizeId: item.sizeId,
+            quantity: item.quantity,
+          }));
+          await cartApi.decreaseStock(stockPayload);
+          const order = await orderApi.createOrder(orderPayload);
+          if (order && order._id && order.totalPrice != null) {
+            await handelVnpay(order._id, order.totalPrice);
+          } else {
+            throw new Error("Order data is incomplete.");
+          }
+        } catch (err: any) {
+          const message = err?.response?.data?.message || "Failed to order.";
+          toast.error(message);
+          console.error("Order error:", err);
+        }
+      }
+
+      toast.success("Your order has been placed.");
+    } catch (e) {
+      toast.error("Failed to place order");
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (isLoading) {
+  const renderPaymentOption = (
+    value: PaymentMethod,
+    label: string,
+    subLabel: string,
+    IconComponent: any
+  ) => {
+    const selected = paymentMethod === value;
     return (
-      <View className="flex-1 justify-center items-center bg-[#FCF7F1]">
-        <ActivityIndicator size="large" color="#FA5800" />
-      </View>
-    );
-  }
-
-  return (
-    <View className="flex-1 bg-[#FCF7F1]">
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 150 }}
-        showsVerticalScrollIndicator={false}
+      <TouchableOpacity
+        onPress={() => setPaymentMethod(value)}
+        className={`flex-row items-center justify-between border px-4 py-4 ${
+          selected ? "border-black bg-neutral-50" : "border-neutral-200"
+        }`}
       >
-        <View
-          className="px-5 pb-4 border-b border-neutral-200 bg-[#FCF7F1] z-10"
-          style={{ paddingTop: insets.top + 10 }}
-        >
-          <View className="flex-row items-center">
-            <TouchableOpacity onPress={() => router.back()} className="mr-3">
-              <Ionicons name="arrow-back" size={24} color="#171717" />
-            </TouchableOpacity>
-            <Text className="text-lg font-sans font-bold uppercase tracking-widest text-neutral-900">
-              Checkout
+        <View className="flex-row items-center gap-3">
+          <View className="w-5 h-5 rounded-full border border-black items-center justify-center">
+            {selected && <View className="w-3 h-3 rounded-full bg-black" />}
+          </View>
+          <View>
+            <Text className="text-[13px] font-bold text-black">{label}</Text>
+            <Text className="text-[11px] text-neutral-500 mt-0.5">
+              {subLabel}
             </Text>
           </View>
         </View>
+        <IconComponent size={24} color="#000" strokeWidth={1.5} />
+      </TouchableOpacity>
+    );
+  };
 
-        <View className="p-5">
-          <View className="mb-6">
-            <Text className="text-xs font-sans font-bold text-neutral-500 uppercase tracking-[0.15em] mb-3">
-              Your Items ({cartItems.length})
-            </Text>
-            <View className="bg-white rounded-sm border border-neutral-200 overflow-hidden">
-              {cartItems.map((item, index) => (
-                <View
-                  key={`${item.variantId}-${index}`}
-                  className={clsx(
-                    "flex-row p-4 gap-4",
-                    index !== cartItems.length - 1 &&
-                      "border-b border-neutral-100"
-                  )}
-                >
-                  <Image
-                    source={{ uri: item.imageUrl }}
-                    className="w-20 h-24 bg-neutral-100 rounded-sm"
-                    resizeMode="cover"
-                  />
-                  <View className="flex-1 justify-between py-1">
-                    <View>
-                      <Text
-                        className="font-sans font-bold text-neutral-900 text-sm uppercase tracking-wide mb-1"
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                      <Text className="text-neutral-500 text-xs font-sans">
-                        {item.color} / {item.size}
-                      </Text>
-                    </View>
-                    <View className="flex-row justify-between items-end">
-                      <Text className="text-neutral-500 text-xs font-sans">
-                        Qty: {item.quantity}
-                      </Text>
-                      <Text className="font-sans font-medium text-neutral-900">
-                        ${(item.price * item.quantity).toLocaleString()}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
+  return (
+    <View className="flex-1 bg-white">
+      <View
+        className="bg-white z-20 px-6 border-b border-neutral-100"
+        style={{ paddingTop: insets.top + 10, paddingBottom: 20 }}
+      >
+        <View className="items-center relative">
+          <Text className="text-xl font-serif text-neutral-900 uppercase tracking-[0.2em]">
+            Checkout
+          </Text>
+          {loading && (
+            <View className="absolute right-0 top-1">
+              <ActivityIndicator size="small" color="#000" />
             </View>
-          </View>
+          )}
+        </View>
+      </View>
 
-          <View className="mb-6">
-            <Text className="text-xs font-sans font-bold text-neutral-500 uppercase tracking-[0.15em] mb-3">
-              Shipping Address
-            </Text>
-            <View className="bg-white rounded-sm border border-neutral-200 p-4">
-              {shippingAddress ? (
-                <View className="flex-row justify-between items-center">
-                  <View className="flex-1 mr-4">
-                    <Text className="font-sans font-bold text-neutral-900 mb-1">
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {error && (
+          <View className="flex-row items-center border border-red-300 bg-red-50 p-3 mb-5">
+            <AlertCircle size={20} color="#DC2626" />
+            <Text className="ml-2 text-red-600 font-medium">{error}</Text>
+          </View>
+        )}
+
+        <View className="border-b border-neutral-200 pb-6 mb-6">
+          <Text className="text-[14px] font-bold tracking-widest mb-4">
+            SHIPPING ADDRESS
+          </Text>
+
+          <TouchableOpacity
+            onPress={openAddressModal}
+            className={`flex-row justify-between items-center border p-4 ${
+              error
+                ? "border-red-600 bg-red-50"
+                : "border-neutral-200 bg-neutral-50"
+            }`}
+          >
+            <View className="flex-row items-center gap-3 flex-1">
+              <View className="w-9 h-9 rounded-full border border-black items-center justify-center bg-white">
+                <MapPin size={20} color="#000" />
+              </View>
+
+              <View className="flex-1 pr-2">
+                {shippingAddress ? (
+                  <>
+                    <Text
+                      className="font-semibold text-black"
+                      numberOfLines={1}
+                    >
                       {shippingAddress.street}
                     </Text>
-                    <Text className="font-sans text-neutral-500 text-sm">
+                    <Text className="text-xs text-neutral-500 uppercase mt-0.5">
                       {shippingAddress.city}
                     </Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => setIsAddressModalOpen(true)}
-                    className="p-2 bg-neutral-50 rounded-full"
-                  >
-                    <Ionicons name="pencil" size={16} color="#FA5800" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  onPress={() => setIsAddressModalOpen(true)}
-                  className="flex-row items-center justify-center py-4 border border-dashed border-neutral-300 rounded-sm"
-                >
-                  <Ionicons name="add" size={20} color="#FA5800" />
-                  <Text className="ml-2 font-sans font-medium text-neutral-600">
-                    Add Address
+                  </>
+                ) : (
+                  <Text className="italic text-neutral-400">
+                    Tap to select address
                   </Text>
-                </TouchableOpacity>
-              )}
+                )}
+              </View>
             </View>
-          </View>
 
-          <View className="mb-6">
-            <Text className="text-xs font-sans font-bold text-neutral-500 uppercase tracking-[0.15em] mb-3">
-              Payment Method
+            <Text className="text-[11px] font-bold underline uppercase">
+              {shippingAddress ? "CHANGE" : "SELECT"}
             </Text>
-            <View className="space-y-3">
-              {[
-                { id: "cash", label: "Cash on Delivery" },
-                { id: "momo", label: "MoMo Wallet" },
-                { id: "vnpay", label: "VNPay" },
-              ].map((method) => {
-                const isSelected = paymentMethod === method.id;
-                return (
-                  <TouchableOpacity
-                    key={method.id}
-                    onPress={() => setPaymentMethod(method.id as any)}
-                    className={clsx(
-                      "flex-row items-center p-4 bg-white border rounded-sm",
-                      isSelected ? "border-[#000]" : "border-neutral-200"
-                    )}
-                  >
-                    <View
-                      className={clsx(
-                        "w-5 h-5 rounded-full border items-center justify-center mr-3",
-                        isSelected ? "border-[#000]" : "border-neutral-300"
-                      )}
-                    >
-                      {isSelected && (
-                        <View className="w-2.5 h-2.5 rounded-full bg-[#000]" />
-                      )}
-                    </View>
-                    <Text
-                      className={clsx(
-                        "font-sans font-medium",
-                        isSelected ? "text-neutral-900" : "text-neutral-600"
-                      )}
-                    >
-                      {method.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          </TouchableOpacity>
+        </View>
 
-          <View className="bg-white p-4 rounded-sm border border-neutral-200">
-            <View className="h-[1px] bg-neutral-100 mb-4" />
-            <View className="flex-row justify-between">
-              <Text className="font-sans font-bold text-neutral-900 uppercase tracking-wide">
-                Total
-              </Text>
-              <Text className="font-sans font-bold text-[#000] text-xl">
-                ${subtotal.toLocaleString()}
-              </Text>
-            </View>
+        <View className="border-b border-neutral-200 pb-6 mb-6">
+          <TouchableOpacity
+            onPress={() => setIsOrderExpanded(!isOrderExpanded)}
+            className="flex-row justify-between items-center mb-4"
+          >
+            <Text className="text-[14px] font-bold tracking-widest">
+              ORDER SUMMARY ({cartItems.length})
+            </Text>
+            {isOrderExpanded ? (
+              <ChevronUp size={20} color="#000" />
+            ) : (
+              <ChevronDown size={20} color="#000" />
+            )}
+          </TouchableOpacity>
+          {isOrderExpanded &&
+            cartItems.map((item) => (
+              <View key={item.variantId} className="flex-row gap-4 mb-5">
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  className="w-[90px] h-[110px] bg-neutral-100"
+                />
+                <View className="flex-1 justify-between py-1">
+                  <View>
+                    <Text
+                      numberOfLines={1}
+                      className="text-base font-semibold text-black"
+                    >
+                      {item.name}
+                    </Text>
+                    <Text className="text-xs text-neutral-500 uppercase mt-1">
+                      {item.color} / {item.size}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between">
+                    <Text className="text-neutral-500">
+                      Qty: {item.quantity}
+                    </Text>
+                    <Text className="font-semibold text-black">
+                      ${(item.price * item.quantity).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+        </View>
+
+        <View className="pb-6">
+          <Text className="text-[14px] font-bold tracking-widest mb-4">
+            PAYMENT METHOD
+          </Text>
+          <View className="gap-3">
+            {renderPaymentOption(
+              "cash",
+              "CASH ON DELIVERY",
+              "Pay when you receive",
+              Banknote
+            )}
+            {renderPaymentOption(
+              "vnpay",
+              "VNPAY QR",
+              "ATM Card / QR Code",
+              CreditCard
+            )}
+            {renderPaymentOption(
+              "momo",
+              "MOMO WALLET",
+              "Pay via MoMo app",
+              Smartphone
+            )}
           </View>
         </View>
       </ScrollView>
 
       <View
-        className="absolute bottom-0 left-0 right-0 bg-[#FCF7F1] border-t border-neutral-200 px-5 py-4 z-20"
-        style={{ paddingBottom: Math.max(insets.bottom, 20) }}
+        className="absolute bottom-0 left-0 right-0 border-t border-neutral-200 bg-white px-5 pt-2 z-10"
+        style={{ paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }}
       >
+        <View className="flex-row justify-between mb-4">
+          <Text className="text-xs tracking-widest text-neutral-500">
+            TOTAL AMOUNT
+          </Text>
+          <Text className="text-2xl font-bold text-black font-serif">
+            ${subtotal.toFixed(2)}
+          </Text>
+        </View>
+
         <TouchableOpacity
           onPress={handlePlaceOrder}
-          disabled={isSubmitting}
-          className={clsx(
-            "w-full py-4 items-center justify-center rounded-sm shadow-sm flex-row",
-            isSubmitting ? "bg-neutral-400" : "bg-[#000]"
-          )}
+          disabled={loading || cartItems.length === 0}
+          className={`py-4 items-center ${
+            loading || cartItems.length === 0 ? "bg-neutral-500" : "bg-black"
+          }`}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="white" />
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
           ) : (
-            <>
-              <Text className="text-white font-sans font-bold uppercase tracking-[0.2em] text-xs mr-2">
-                Confirm Order
-              </Text>
-              <Ionicons name="arrow-forward" size={16} color="white" />
-            </>
+            <Text className="text-white font-bold tracking-[0.2em]">
+              PLACE ORDER
+            </Text>
           )}
         </TouchableOpacity>
       </View>
 
-      <AddressSelectionModal
-        visible={isAddressModalOpen}
-        onClose={() => setIsAddressModalOpen(false)}
-        addresses={allAddresses}
-        selectedId={shippingAddress?._id}
-        onSelect={setShippingAddress}
-      />
+      <Modal
+        transparent
+        visible={isAddressModalVisible}
+        animationType="fade"
+        onRequestClose={() => setAddressModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1 justify-end bg-black/60"
+        >
+          <View className="bg-white rounded-t-2xl p-6 h-[60%]">
+            <View className="flex-row justify-between items-center border-b border-neutral-100 pb-4 mb-4">
+              <Text className="font-bold tracking-widest text-base">
+                SELECT ADDRESS
+              </Text>
+              <TouchableOpacity
+                onPress={() => setAddressModalVisible(false)}
+                className="p-1"
+              >
+                <X size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View className="gap-4 pb-20">
+                {allAddresses.map((addr, index) => {
+                  const isSelected = tempSelectedIndex === index;
+
+                  return (
+                    <TouchableOpacity
+                      key={addr._id}
+                      onPress={() => setTempSelectedIndex(index)}
+                      activeOpacity={0.7}
+                      className={`border p-4 ${
+                        isSelected
+                          ? "border-black bg-neutral-50"
+                          : "border-neutral-200"
+                      }`}
+                    >
+                      <View className="flex-row justify-between items-start">
+                        <View className="flex-1 pr-4">
+                          <View className="flex-row items-center mb-1 gap-2">
+                            <Text className="font-bold text-black uppercase tracking-wide text-xs">
+                              {addr.city}
+                            </Text>
+                            {addr.isDefault && (
+                              <View className="bg-neutral-200 px-2 py-0.5 rounded-sm">
+                                <Text className="text-[10px] font-bold text-neutral-600">
+                                  DEFAULT
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text className="text-neutral-600 text-sm mt-1">
+                            {addr.street}
+                          </Text>
+                        </View>
+
+                        <View
+                          className={`w-5 h-5 rounded-full border items-center justify-center ${
+                            isSelected
+                              ? "border-black bg-black"
+                              : "border-neutral-300"
+                          }`}
+                        >
+                          {isSelected && (
+                            <Check size={12} color="#FFF" strokeWidth={3} />
+                          )}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View className="pt-4 border-t border-neutral-100">
+              <TouchableOpacity
+                onPress={confirmAddressSelection}
+                disabled={tempSelectedIndex === null}
+                className={`py-4 items-center justify-center ${
+                  tempSelectedIndex === null ? "bg-neutral-300" : "bg-black"
+                }`}
+              >
+                <Text className="text-white font-bold tracking-widest text-xs">
+                  CONFIRM SELECTION
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
-
-export default withAuth(OrderPage);

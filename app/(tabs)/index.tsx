@@ -1,7 +1,10 @@
+import productApi from "@/api/product";
 import ParallaxScrollView from "@/components/parallax-scroll-view";
+import { ResProduct } from "@/types/product";
 import { Ionicons } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
 import { useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -13,53 +16,18 @@ import {
 
 const { width } = Dimensions.get("window");
 
-const FEATURED_PRODUCTS = [
-  {
-    id: "fp1",
-    name: "Heure H Watch",
-    sub: "21 mm, Steel",
-    price: "$3,375",
-    image:
-      "https://images.unsplash.com/photo-1524592094714-0f0654e20314?q=80&w=500&auto=format&fit=crop",
-  },
-  {
-    id: "fp2",
-    name: "Oran Sandal",
-    sub: "Box Calfskin",
-    price: "$760",
-    image:
-      "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?q=80&w=500&auto=format&fit=crop",
-  },
-  {
-    id: "fp3",
-    name: "Chaine d'Ancre",
-    sub: "Silver Bracelet",
-    price: "$1,450",
-    image:
-      "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=500&auto=format&fit=crop",
-  },
-  {
-    id: "fp4",
-    name: "Avalon Throw",
-    sub: "Merino Wool",
-    price: "$1,800",
-    image:
-      "https://images.unsplash.com/photo-1616486338812-3dadae4b4f9d?q=80&w=500&auto=format&fit=crop",
-  },
-];
-
 const COLLECTIONS = [
   {
     id: 1,
     title: "Women",
     image:
-      "https://images.unsplash.com/photo-1616165507963-7eb92723c3b0?q=80&w=600&auto=format&fit=crop",
+      "https://res.cloudinary.com/dzskttedu/image/upload/v1765354518/candy-libris-bandana-light-long-sleeve-cardigan--5H2729D302-worn-5-0-0-2000-2000-q99_g_grj3es.webp",
   },
   {
     id: 2,
     title: "Men",
     image:
-      "https://images.unsplash.com/photo-1617137968427-b2879f439691?q=80&w=600&auto=format&fit=crop",
+      "https://res.cloudinary.com/dzskttedu/image/upload/v1765354513/straight-cut-denim-jacket--562480HN60-worn-1-0-0-2000-2000-q99_g_kzgask.webp",
   },
   {
     id: 3,
@@ -77,36 +45,81 @@ const COLLECTIONS = [
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [products, setProducts] = useState<ResProduct[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await productApi.topProducts();
+        const fullProducts: ResProduct[] = [];
+
+        for (const p of res.products) {
+          const detail = await productApi.findOneProduct(p.productId);
+          fullProducts.push(detail);
+        }
+
+        setProducts(fullProducts);
+      } catch (err) {
+        console.error("Failed to fetch recommended products", err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (products.length === 0) return null;
 
   const handleShopNow = () => {
     router.push("/(tabs)/product");
   };
 
-  const renderFeaturedItem = ({ item }: { item: any }) => (
-    <TouchableOpacity className="mr-6 w-40 group" activeOpacity={0.9}>
-      <View className="w-40 h-52 bg-neutral-50 mb-4 overflow-hidden border border-neutral-100">
-        <Image
-          source={{ uri: item.image }}
-          className="w-full h-full"
-          resizeMode="cover"
-        />
-      </View>
-      <View>
-        <Text
-          numberOfLines={1}
-          className="text-xs font-bold text-neutral-900 uppercase tracking-widest mb-1"
-        >
-          {item.name}
-        </Text>
-        <Text className="text-[10px] text-neutral-500 uppercase tracking-wide mb-2">
-          {item.sub}
-        </Text>
-        <Text className="text-xs font-serif text-neutral-900">
-          {item.price}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderFeaturedItem = ({ item }: { item: ResProduct }) => {
+    const firstImage = item.images?.[0];
+    const variant = item.variants?.[0];
+    const size = variant?.sizes?.[0];
+
+    if (!firstImage || !size) return null;
+
+    return (
+      <TouchableOpacity
+        className="mr-6 w-40"
+        activeOpacity={0.9}
+        onPress={() => router.push(`/product/${item._id}`)}
+      >
+        <View className="w-40 h-52 bg-neutral-50 mb-4 overflow-hidden border border-neutral-100">
+          <Image
+            source={{ uri: firstImage.url }}
+            className="w-full h-full"
+            resizeMode="cover"
+          />
+        </View>
+
+        <View>
+          <Text
+            numberOfLines={1}
+            className="text-xs font-bold text-neutral-900 uppercase tracking-widest mb-1"
+          >
+            {item.name}
+          </Text>
+
+          {size.salePrice ? (
+            <View className="flex-row items-center gap-2">
+              <Text className="text-xs font-bold text-red-600">
+                ${size.salePrice.toFixed(2)}
+              </Text>
+              <Text className="text-xs text-neutral-500 line-through">
+                ${size.price.toFixed(2)}
+              </Text>
+            </View>
+          ) : (
+            <Text className="text-xs font-serif text-neutral-900">
+              ${size.price.toFixed(2)}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <ParallaxScrollView
@@ -153,10 +166,10 @@ export default function HomeScreen() {
         </View>
 
         <FlatList
-          data={FEATURED_PRODUCTS}
+          data={products}
           horizontal
           renderItem={renderFeaturedItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item._id}
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingRight: 24 }}
         />

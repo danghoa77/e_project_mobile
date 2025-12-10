@@ -44,8 +44,18 @@
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "extra":{
-       "API_URL": "https://1266da291f3f.ngrok-free.app"
+    "extra": {
+      "API_URL": "https://1266da291f3f.ngrok-free.app",
+      "router": {},
+      "eas": {
+        "projectId": "c2e2ad90-93c1-438b-b72f-d06010131cb6"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c2e2ad90-93c1-438b-b72f-d06010131cb6"
     }
   }
 }

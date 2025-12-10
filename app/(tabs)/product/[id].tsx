@@ -1,3 +1,7 @@
+import { cartApi } from "@/api/cart";
+import productApi from "@/api/product";
+import { useAuthStore } from "@/stores/authStore";
+import { ResProduct } from "@/types/product";
 import { Ionicons } from "@expo/vector-icons";
 import clsx from "clsx";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -10,104 +14,16 @@ import {
   Image,
   LayoutAnimation,
   Modal,
-  Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  UIManager,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+import { toast } from "sonner-native";
 
 const { width } = Dimensions.get("window");
-const productApi = {
-  findOneProduct: async (id: string) => {
-    return new Promise((resolve) =>
-      setTimeout(
-        () =>
-          resolve({
-            _id: id,
-            name: "Hermès Casual Jacket",
-            description:
-              "A premium jacket suitable for all seasons. Crafted with precision.",
-            category: { _id: "cat1", name: "Jacket" },
-            variants: [
-              {
-                _id: "var1",
-                color: "Navy",
-                sizes: [
-                  { _id: "s1", size: "S", price: 200, stock: 5 },
-                  { _id: "s2", size: "M", price: 200, stock: 0 },
-                  { _id: "s3", size: "L", price: 200, stock: 3 },
-                ],
-              },
-              {
-                _id: "var2",
-                color: "Beige",
-                sizes: [
-                  {
-                    _id: "s4",
-                    size: "S",
-                    price: 220,
-                    stock: 2,
-                    salePrice: 180,
-                  },
-                  {
-                    _id: "s5",
-                    size: "M",
-                    price: 220,
-                    stock: 4,
-                    salePrice: 180,
-                  },
-                ],
-              },
-            ],
-            images: [
-              {
-                url: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=600&auto=format&fit=crop",
-              },
-              {
-                url: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=600&auto=format&fit=crop",
-              },
-              {
-                url: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=600&auto=format&fit=crop",
-              },
-            ],
-            ratings: [
-              {
-                _id: "r1",
-                userName: "John Doe",
-                rating: 5,
-                comment: "Excellent quality!",
-                userId: "u1",
-              },
-            ],
-          }),
-        1000
-      )
-    );
-  },
-  addItemToCart: async (payload: any) =>
-    new Promise((res) => setTimeout(res, 500)),
-  createRating: async (payload: any) =>
-    new Promise((res) =>
-      setTimeout(() => res({ _id: Math.random().toString() }), 500)
-    ),
-  deleteRating: async (id: string) =>
-    new Promise((res) => setTimeout(res, 500)),
-};
-const userStore = () => ({
-  increaseCartItemCount: () => console.log("Cart +1"),
-});
-const useAuthStore = () => ({ user: { _id: "u1", name: "Guest User" } });
 
 const AccordionItem = ({ title, children, isOpen, onPress }: any) => {
   return (
@@ -136,40 +52,98 @@ const AccordionItem = ({ title, children, isOpen, onPress }: any) => {
   );
 };
 
-const RecommendCard = () => (
-  <View className="mt-16 mb-10">
-    <Text className="text-sm font-sans font-bold text-neutral-900 mb-6 uppercase tracking-[0.2em]">
-      You May Also Like
-    </Text>
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      className="-ml-1"
-    >
-      {[1, 2, 3].map((i) => (
-        <View key={i} className="mr-4 w-36">
-          <View className="h-48 bg-white border border-neutral-100 rounded-sm items-center justify-center mb-2">
-            <Text className="text-neutral-300 font-sans text-xs uppercase">
-              Image {i}
-            </Text>
-          </View>
-          <Text className="text-xs font-sans text-neutral-900 uppercase tracking-wide">
-            Item Name {i}
-          </Text>
-          <Text className="text-xs font-sans text-neutral-500 mt-1">
-            $1,250
-          </Text>
-        </View>
-      ))}
-    </ScrollView>
-  </View>
-);
+const RecommendCard = () => {
+  const router = useRouter();
+  const [products, setProducts] = useState<ResProduct[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await productApi.topProducts();
+        const fullProducts: ResProduct[] = [];
+
+        for (const p of res.products) {
+          const detail = await productApi.findOneProduct(p.productId);
+          fullProducts.push(detail);
+        }
+
+        setProducts(fullProducts);
+      } catch (err) {
+        console.error("Failed to fetch recommended products", err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (products.length === 0) return null;
+
+  return (
+    <View className="mt-16 mb-10">
+      <Text className="text-sm font-sans font-bold text-neutral-900 mb-6 uppercase tracking-[0.2em]">
+        You May Also Like
+      </Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="-ml-1"
+      >
+        {products.slice(0, 5).map((product) => {
+          const displayVariant = product.variants?.[0];
+          const firstSize = displayVariant?.sizes?.[0];
+          const firstImage = product.images?.[0];
+
+          if (!displayVariant || !firstSize || !firstImage) return null;
+
+          return (
+            <TouchableOpacity
+              key={product._id}
+              className="mr-4 w-36"
+              onPress={() => router.push(`/product/${product._id}`)}
+            >
+              <View className="h-48 bg-white border border-neutral-100 rounded-sm overflow-hidden mb-2">
+                <Image
+                  source={{ uri: firstImage.url }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                />
+              </View>
+
+              <Text className="text-xs font-sans font-bold text-neutral-900 uppercase tracking-wide">
+                {product.name}
+              </Text>
+
+              {/* Price */}
+              <View className="flex-row items-center mt-1">
+                {firstSize.salePrice ? (
+                  <>
+                    <Text className="text-xs font-sans text-red-600 mr-2">
+                      ${firstSize.salePrice.toFixed(2)}
+                    </Text>
+
+                    <Text className="text-xs font-sans text-neutral-500 line-through">
+                      ${firstSize.price.toFixed(2)}
+                    </Text>
+                  </>
+                ) : (
+                  <Text className="text-xs font-sans text-neutral-800">
+                    ${firstSize.price.toFixed(2)}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { increaseCartItemCount } = userStore();
   const { user } = useAuthStore();
   const [product, setProduct] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -251,23 +225,53 @@ export default function ProductDetail() {
     if (!product || !selectedColorVariant || !selectedSizeOption) return;
     setIsAdding(true);
     try {
-      await productApi.addItemToCart({});
-      increaseCartItemCount();
-      Alert.alert(
-        "Added to Bag",
-        "This item has been added to your shopping bag."
-      );
+      const payload = {
+        productId: product._id,
+        variantId: selectedColorVariant._id,
+        sizeId: selectedSizeOption._id,
+        categoryId: product.category._id,
+        quantity: 1,
+      };
+      await cartApi.addItemToCart(payload);
+      toast.success("Added to cart!");
     } catch (err) {
       Alert.alert("Error", "Failed to add to cart");
     } finally {
       setIsAdding(false);
     }
   };
+  const handleDeleteRating = async (productId: string, ratingId: string) => {
+    try {
+      await productApi.deleteRating(productId);
+      toast.success("Deleted rating!");
+
+      setProduct((prev: any) =>
+        prev
+          ? {
+              ...prev,
+              ratings: prev.ratings.filter((r: any) => r._id !== ratingId),
+            }
+          : prev
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete rating");
+    }
+  };
 
   const handleAddRating = async () => {
     if (!newRating || !newComment.trim()) return;
+
+    const payload = {
+      userId: user?._id,
+      productId: product._id,
+      rating: newRating,
+      comment: newComment,
+    };
+
     try {
-      const res: any = await productApi.createRating({});
+      const res: any = await productApi.createRating(payload);
+
       const newReview = {
         ...res,
         rating: newRating,
@@ -275,10 +279,12 @@ export default function ProductDetail() {
         userId: user?._id,
         userName: "You",
       };
+
       setProduct((prev: any) => ({
         ...prev,
         ratings: [newReview, ...prev.ratings],
       }));
+
       setNewRating(0);
       setNewComment("");
       setReviewModalOpen(false);
@@ -472,7 +478,6 @@ export default function ProductDetail() {
                 </Text>
               </TouchableOpacity>
             </View>
-
             {(isReviewExpanded
               ? product.ratings
               : product.ratings.slice(0, 3)
@@ -485,7 +490,8 @@ export default function ProductDetail() {
                   <Text className="text-xs font-bold uppercase tracking-wide text-neutral-800">
                     {r.userName}
                   </Text>
-                  <View className="flex-row">
+
+                  <View className="flex-row items-center">
                     {[...Array(5)].map((_, i) => (
                       <Ionicons
                         key={i}
@@ -494,8 +500,22 @@ export default function ProductDetail() {
                         color="#FA5800"
                       />
                     ))}
+
+                    {r.userId === user?._id && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteRating(product._id, r._id)}
+                        className="ml-3"
+                      >
+                        <Ionicons
+                          name="trash-outline"
+                          size={16}
+                          color="#EF4444"
+                        />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
+
                 <Text className="text-neutral-600 text-sm font-sans italic leading-5">
                   "{r.comment}"
                 </Text>
@@ -537,7 +557,7 @@ export default function ProductDetail() {
           {isAdding ? (
             <ActivityIndicator color="white" />
           ) : (
-            <Text className="text-white font-sans font-bold uppercase tracking-[0.2em] text-xs">
+            <Text className="text-white font-sans font-bold uppercase tracking-[0.2em] text-xs py-1">
               {isAddToCartDisabled
                 ? selectedSizeOption?.stock === 0
                   ? "Sold Out"

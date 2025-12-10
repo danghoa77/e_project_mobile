@@ -23,8 +23,13 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      toast.error("Please enter email & password");
+    if (!email.trim() || !password.trim()) {
+      if (!email.trim()) {
+        toast.success("Please enter your email");
+      }
+      if (!password.trim()) {
+        toast.error("Please enter your password");
+      }
       return;
     }
 
@@ -32,6 +37,7 @@ export default function LoginScreen() {
     try {
       const res = await authApi.login(email, password);
       console.log("res", res);
+
       setUser(res.user, res.access_token);
       router.replace("/");
       toast.success("Logged in successfully!");
@@ -45,6 +51,7 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
   return (
     <View className="flex-1 justify-center px-6 bg-white">
       <Text className="text-3xl font-bold mb-8 text-center">Login</Text>

@@ -6,7 +6,7 @@ import { toast } from 'sonner-native';
 
 
 // const extra = Constants.expoConfig?.extra ?? {};
-export const API_BASE_URL = "https://1266da291f3f.ngrok-free.app";
+export const API_BASE_URL = "https://140b31ebe40a.ngrok-free.app";
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
     headers: {

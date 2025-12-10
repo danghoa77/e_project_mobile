@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { toast } from "sonner-native"; 
+import { toast } from "sonner-native";
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -20,11 +20,10 @@ export default function RegisterScreen() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
 
-  const showError = (message: string) => toast.error(message);
-  const showSuccess = (message: string) => toast.success(message);
+  const showError = (msg: string) => toast.error(msg);
+  const showSuccess = (msg: string) => toast.success(msg);
 
   const handleRegister = async () => {
     if (!name || !email || !phone || !password) {
@@ -39,15 +38,17 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      const payload = { name, email, phone, password, role: "customer" };
-
-      const res = await authApi.register({ ...payload, confirmPassword });
+      const res = await authApi.register(
+        name,
+        email,
+        phone,
+        password,
+        "customer"
+      );
       showSuccess("Account created!");
-
-      setUser(res.data.user, res.data.access_token);
+      setUser(res.user, res.access_token);
       router.replace("/");
     } catch (error: any) {
-      console.log(error);
       const message = error.response?.data?.message || "Registration failed";
       showError(message);
     } finally {

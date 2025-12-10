@@ -6,8 +6,15 @@ export const authApi = {
         console.log(res);
         return res.data;
     },
-    register: async (payload: any) => {
-        const res = await apiClient.post('/auth/register', { payload });
+    register: async (name: string, email: string, phone: string, password: string, role: string) => {
+        const res = await apiClient.post('/auth/register', {
+            name,
+            email,
+            phone,
+            password,
+            role
+        });
+
         return res.data;
     },
 

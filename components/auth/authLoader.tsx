@@ -27,7 +27,7 @@ export const AuthLoader = ({ children }: React.PropsWithChildren) => {
 
   if (isLoading) {
     return (
-      <View className="flex-row items-center justify-center h-[50vh]">
+      <View className="flex-1 items-center justify-center bg-white/80">
         <ActivityIndicator size="large" />
         <Text className="ml-2 text-muted-foreground">
           Authenticating user...

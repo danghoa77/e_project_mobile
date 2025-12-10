@@ -1,9 +1,11 @@
+import { cartApi } from "@/api/cart";
 import { withAuth } from "@/components/auth/withAuth";
 import ParallaxScrollView from "@/components/parallax-scroll-view";
 import { Cart } from "@/types/cart";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,62 +15,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const customerApi = {
-  getCart: async (): Promise<Cart> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          items: [
-            {
-              productId: "68d579dbc7e9a2d6ee4020b5",
-              variantId: "68d579dbc7e9a2d6ee4020ba",
-              sizeId: "68d579dbc7e9a2d6ee4020bd",
-              categoryId: "68ce49691dacc57fb9910f5c",
-              name: "Hermès H08 Watch",
-              color: "Titanium",
-              size: "39mm",
-              price: 5650,
-              imageUrl:
-                "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?q=80&w=300&auto=format&fit=crop",
-              quantity: 1,
-            },
-            {
-              productId: "68d57c07c7e9a2d6ee40211f",
-              variantId: "68d57c07c7e9a2d6ee402120",
-              sizeId: "68d57c07c7e9a2d6ee402121",
-              categoryId: "68d57bb3c7e9a2d6ee402119",
-              name: "Izmir Sandal",
-              color: "Noir/Ecru",
-              size: "42",
-              price: 790,
-              imageUrl:
-                "https://images.unsplash.com/photo-1549298916-b41d501d3772?q=80&w=300&auto=format&fit=crop",
-              quantity: 2,
-            },
-          ],
-        });
-      }, 500);
-    });
-  },
-
-  updateQuantity: async (
-    pId: string,
-    vId: string,
-    sId: string,
-    qty: number
-  ) => {
-    return new Promise((resolve) =>
-      setTimeout(() => resolve({ success: true }), 500)
-    );
-  },
-
-  removeItemFromCart: async (pId: string, vId: string, sId: string) => {
-    return new Promise((resolve) =>
-      setTimeout(() => resolve({ success: true }), 500)
-    );
-  },
-};
 
 function CartPage() {
   const insets = useSafeAreaInsets();
@@ -91,7 +37,8 @@ function CartPage() {
   const fetchCart = async () => {
     setLoading(true);
     try {
-      const res = await customerApi.getCart();
+      const res = await cartApi.getCart();
+      console.log("Fetched cart:", res);
       setCart(normalizeCart(res));
     } catch (err) {
       console.error("Error fetching cart:", err);
@@ -121,7 +68,7 @@ function CartPage() {
     }));
 
     try {
-      await customerApi.updateQuantity(productId, variantId, sizeId, quantity);
+      await cartApi.updateQuantity(productId, variantId, sizeId, quantity);
     } catch (err) {
       console.error("Error updating quantity:", err);
       setCart(prevCart);
@@ -141,7 +88,7 @@ function CartPage() {
     }));
 
     try {
-      await customerApi.removeItemFromCart(productId, variantId, sizeId);
+      await cartApi.removeItemFromCart(productId, variantId, sizeId);
     } catch (err) {
       console.error("Error removing item:", err);
       setCart(prevCart);
@@ -150,18 +97,14 @@ function CartPage() {
   };
 
   const handleCheckout = () => {
-    if (cart.items.length === 0) return;
-    const payload = cart.items.map((item) => ({
-      ...item,
-      total: item.price * item.quantity,
-    }));
-    console.log("CHECKOUT PAYLOAD:", JSON.stringify(payload, null, 2));
-    Alert.alert("Checkout", "Proceeding to secure checkout");
+    router.push("/(tabs)/order");
   };
 
-  useEffect(() => {
-    fetchCart();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchCart();
+    }, [])
+  );
 
   return (
     <View className="flex-1 bg-white">

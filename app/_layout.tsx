@@ -15,8 +15,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <Toaster position="bottom-center" richColors />
       <AuthLoader>
-        <Toaster position="bottom-center" />
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
